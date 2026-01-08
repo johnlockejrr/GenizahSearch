@@ -6789,12 +6789,12 @@ class GenizahGUI(QMainWindow):
                     placeholder = QTreeWidgetItem(group_node, [tr("Loading...")])
                     placeholder.setData(0, Qt.ItemDataRole.UserRole + 201, "PLACEHOLDER")
 
-            # 3. Filtered 
+            # 3. Filtered
             total_filt = len(clean_filt) + sum(len(v) for v in clean_filt_appx.values())
             if total_filt > 0:
                 root_filt = QTreeWidgetItem(self.comp_tree, [tr("Filtered ({})").format(total_filt)])
                 root_filt.setData(0, Qt.ItemDataRole.UserRole + 100, "ROOT_FILT")
-                root_filt.setForeground(0, Qt.GlobalColor.gray)
+                root_filt.setExpanded(True)
                 make_checkable(root_filt)
                 
                 # Filtered Main
