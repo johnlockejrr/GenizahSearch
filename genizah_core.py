@@ -3256,6 +3256,24 @@ class Indexer:
                         global_seq_index += 1
                     total_docs += 1
 
+        # Deduplicate system_pages: keep only one entry per p_num, prefer V0.8 over V0.7
+        for sid in system_pages:
+            pages = system_pages[sid]
+            if not pages:
+                continue
+            # Group by p_num, prefer V0.8
+            by_pnum = {}
+            for p in pages:
+                pnum = p.get('p_num', 0)
+                existing = by_pnum.get(pnum)
+                if existing is None:
+                    by_pnum[pnum] = p
+                elif p.get('source') == 'V0.8' and existing.get('source') != 'V0.8':
+                    # V0.8 takes priority
+                    by_pnum[pnum] = p
+            # Replace with deduplicated list
+            system_pages[sid] = list(by_pnum.values())
+
         # Build continuous documents per System ID
         for sid, pages in system_pages.items():
             if not pages:
@@ -3789,10 +3807,42 @@ class SearchEngine:
         return deduped
 
     def _deduplicate(self, results):
-        v8 = {r['uid']: r for r in results if r['display']['source'] == "V0.8"}
-        final = list(v8.values())
+        """Deduplicate results, preferring V0.8 over V0.7.
+
+        Uses sys_id + p_num as the dedup key (not just uid) to handle cases where
+        the same physical page appears in both scope='page' and scope='system/part'
+        documents with different uids (e.g., V0.8 vs V0.7 versions in continuous docs).
+        """
+        # Build dedup key from raw_header (sys_id + p_num)
+        def get_dedup_key(r):
+            header = r.get('raw_header', '')
+            sid, p_num = self.meta_mgr.parse_header_smart(header)
+            if sid and p_num and p_num != 'Unknown':
+                return f"{sid}_{p_num}"
+            # Fallback to uid if we can't parse sys_id + p_num
+            return r.get('uid', '')
+
+        # First pass: collect V0.8 results by dedup key
+        v8_by_key = {}
         for r in results:
-            if r['display']['source'] == "V0.7" and r['uid'] not in v8: final.append(r)
+            if r['display']['source'] == "V0.8":
+                key = get_dedup_key(r)
+                # If same key already exists, keep the one with scope='page' (more specific)
+                existing = v8_by_key.get(key)
+                if existing is None:
+                    v8_by_key[key] = r
+                elif r.get('scope') == 'page' and existing.get('scope') != 'page':
+                    v8_by_key[key] = r
+
+        final = list(v8_by_key.values())
+
+        # Second pass: add V0.7 results only if no V0.8 exists for same key
+        for r in results:
+            if r['display']['source'] == "V0.7":
+                key = get_dedup_key(r)
+                if key not in v8_by_key:
+                    final.append(r)
+
         return final
 
     def search_composition_logic(self, full_text, chunk_size, max_freq, mode, filter_text=None, progress_callback=None):
@@ -3834,12 +3884,19 @@ class SearchEngine:
                 
                 for score, doc_addr in hits:
                     doc = self.searcher.doc(doc_addr)
+
+                    # Skip aggregated documents (scope='system' or 'part') to avoid duplicates
+                    # We only want individual page results
+                    scope_list = self._get_field(doc, 'scope', ['page']) or ['page']
+                    if scope_list[0] != 'page':
+                        continue
+
                     content = doc['content'][0]
-                    
+
                     # Verify exact Regex match
                     if regex.search(content):
                         uid = doc['unique_id'][0]
-                        
+
                         # Route to appropriate map
                         if is_text_filtered or is_freq_filtered:
                             rec = doc_hits_filtered[uid]
