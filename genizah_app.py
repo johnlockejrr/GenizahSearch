@@ -3292,7 +3292,36 @@ class GenizahGUI(QMainWindow):
         comp_header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents) # System ID
         comp_header.setStretchLastSection(True)
 
+        # Hide context columns (moved to compact display below)
+        self.comp_tree.setColumnHidden(self.comp_col_context, True)
+        self.comp_tree.setColumnHidden(self.comp_col_ms_context, True)
+
         rl.addWidget(self.comp_tree)
+
+        # Compact context display below tree
+        context_container = QWidget()
+        context_layout = QVBoxLayout(context_container)
+        context_layout.setContentsMargins(5, 5, 5, 5)
+        context_layout.setSpacing(3)
+
+        # Context label
+        context_label = QLabel(tr("Search Context:"))
+        context_label.setStyleSheet("font-weight: bold; font-size: 11px;")
+        context_layout.addWidget(context_label)
+
+        # Compact text display for full context with highlights
+        self.comp_context_display = QTextBrowser()
+        self.comp_context_display.setMaximumHeight(120)  # Compact but scrollable height
+        self.comp_context_display.setFont(QFont("SBL Hebrew", 12))
+        self.comp_context_display.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+        self.comp_context_display.setStyleSheet("border: 1px solid #bdc3c7; padding: 8px; background: #ecf0f1;")
+        self.comp_context_display.setVisible(False)  # Hidden until selection
+        context_layout.addWidget(self.comp_context_display)
+
+        rl.addWidget(context_container)
+
+        # Connect tree selection to update context display
+        self.comp_tree.itemSelectionChanged.connect(self._update_comp_context_display)
         
         exp_layout = QHBoxLayout()
         self.lbl_comp_export = QLabel(tr("Save Report"))
@@ -8349,6 +8378,53 @@ class GenizahGUI(QMainWindow):
                         pattern = item_data.get('highlight_pattern')
 
                 self._set_comp_node_previews(item, ctx, snippet, pattern)
+
+    def _update_comp_context_display(self):
+        """Update the compact context display below the tree with full context and highlights."""
+        selected_items = self.comp_tree.selectedItems()
+        if not selected_items:
+            self.comp_context_display.setVisible(False)
+            return
+
+        item = selected_items[0]
+        data = item.data(0, Qt.ItemDataRole.UserRole)
+        if not data:
+            self.comp_context_display.setVisible(False)
+            return
+
+        # Get context data
+        source_ctx = data.get('source_ctx', '')
+        ms_ctx = data.get('ms_ctx', '')
+
+        # Skip if no context available
+        if not source_ctx and not ms_ctx:
+            self.comp_context_display.setVisible(False)
+            return
+
+        # Build HTML with full context and highlights
+        html_parts = []
+
+        if source_ctx:
+            # Convert *word* markers to red bold HTML (matching HiddenScrollArea style)
+            processed = re.sub(r'\*(.*?)\*', r"<b style='color:#c0392b;'>\1</b>", source_ctx)
+            # Handle partial markers
+            processed = re.sub(r'\*([^*]+)$', r"<b style='color:#c0392b;'>\1</b>", processed)
+            processed = re.sub(r'^([^*]+)\*', r"<b style='color:#c0392b;'>\1</b>", processed)
+            processed = processed.replace("*", "")
+            html_parts.append(f"<div dir='rtl'><b style='color:#2980b9;'>{tr('Match Context (Source)')}:</b> {processed}</div>")
+
+        if ms_ctx:
+            # Convert *word* markers to red bold HTML
+            processed = re.sub(r'\*(.*?)\*', r"<b style='color:#c0392b;'>\1</b>", ms_ctx)
+            processed = re.sub(r'\*([^*]+)$', r"<b style='color:#c0392b;'>\1</b>", processed)
+            processed = re.sub(r'^([^*]+)\*', r"<b style='color:#c0392b;'>\1</b>", processed)
+            processed = processed.replace("*", "")
+            if html_parts:
+                html_parts.append("<br>")
+            html_parts.append(f"<div dir='rtl'><b style='color:#27ae60;'>{tr('Manuscript Context')}:</b> {processed}</div>")
+
+        self.comp_context_display.setHtml("".join(html_parts))
+        self.comp_context_display.setVisible(True)
 
     def on_comp_item_double_clicked(self, item, column):
         """

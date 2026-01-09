@@ -645,8 +645,8 @@ class LabEngine:
         start_m_idx = max(0, start_m_idx)
         end_m_idx = min(len(matches) - 1, end_m_idx)
 
-        # 1. Determine snippet bounds (100 chars context)
-        padding = 100
+        # 1. Determine snippet bounds (250 chars context)
+        padding = 250
         snippet_start_char = max(0, matches[start_m_idx]['start'] - padding)
         snippet_end_char = min(len(text), matches[end_m_idx]['end'] + padding)
         
@@ -953,7 +953,7 @@ class LabEngine:
                     else: clusters.append(curr_cluster); curr_cluster = [idx]
                 clusters.append(curr_cluster)
                 for cl in clusters:
-                    start_ctx = max(0, cl[0] - 50); end_ctx = min(len(tokens), cl[-1] + 51)
+                    start_ctx = max(0, cl[0] - 150); end_ctx = min(len(tokens), cl[-1] + 151)
                     cl_set = set(cl)
                     words_out = [f"*{tokens[k]}*" if k in cl_set else tokens[k] for k in range(start_ctx, end_ctx)]
                     src_snippets.append(f"... {' '.join(words_out)} ...")
@@ -970,7 +970,7 @@ class LabEngine:
             
             content = data['content']
             for s, e in merged:
-                start = max(0, s - 60); end = min(len(content), e + 60)
+                start = max(0, s - 200); end = min(len(content), e + 200)
                 snip = content[start:end]
                 rs = max(0, s - start); re_ = min(len(snip), e - start)
                 if re_ > rs:
@@ -3516,8 +3516,8 @@ class SearchEngine:
         m = regex.search(text)
         if not m: return None
         s, e = m.span()
-        start = max(0, s - 60)
-        end = min(len(text), e + 60)
+        start = max(0, s - 200)
+        end = min(len(text), e + 200)
         
         # Calculate indices relative to snippet
         rel_s = s - start
@@ -3544,8 +3544,8 @@ class SearchEngine:
         if not span:
             return None
         s, e = span
-        start = max(0, s - 60)
-        end = min(len(text), e + 60)
+        start = max(0, s - 200)
+        end = min(len(text), e + 200)
 
         rel_s = s - start
         rel_e = e - start
@@ -3906,7 +3906,7 @@ class SearchEngine:
                 
                 ms_snips = []
                 for s, e in merged:
-                    start = max(0, s - 60); end = min(len(data['content']), e + 60)
+                    start = max(0, s - 200); end = min(len(data['content']), e + 200)
                     fragment = data['content'][start:s] + \
                                f"*{data['content'][s:e]}*" + \
                                data['content'][e:end]
